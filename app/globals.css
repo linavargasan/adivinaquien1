@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-fraunces: 'Fraunces', Georgia, serif;
+  --font-work: 'Work Sans', system-ui, sans-serif;
+}
+
+html, body {
+  background-color: #173226;
+  color: #F6EFDE;
+}
+
+body {
+  font-family: var(--font-work);
+  background-image:
+    radial-gradient(circle at 15% 10%, rgba(201,162,39,0.08), transparent 40%),
+    radial-gradient(circle at 85% 90%, rgba(169,51,62,0.10), transparent 45%);
+  min-height: 100vh;
+}
+
+.font-display {
+  font-family: var(--font-fraunces);
+}
+
+/* Corkboard texture for the game board */
+.corkboard {
+  background-color: #1f3d2d;
+  background-image:
+    linear-gradient(rgba(0,0,0,0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.15) 1px, transparent 1px);
+  background-size: 28px 28px;
+  border: 1px solid rgba(201,162,39,0.25);
+}
+
+/* Photo tag: like a hand-labeled family photo pinned to a board */
+.photo-tag {
+  background: var(--paper, #F6EFDE);
+  padding: 10px 10px 14px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.35);
+  transition: transform 160ms ease, opacity 200ms ease, filter 200ms ease;
+}
+
+.photo-tag:hover {
+  transform: translateY(-3px) rotate(0deg) !important;
+}
+
+.photo-tag.discarded {
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+
+.pin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #e6c86a, #8a6b12);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+/* Clue note: like a small torn note card */
+.clue-note {
+  background: #F6EFDE;
+  color: #173226;
+  border-left: 6px solid #A9333E;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.3);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(201,162,39,0.5);
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
