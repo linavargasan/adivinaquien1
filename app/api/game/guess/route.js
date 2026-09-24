@@ -1,19 +1,30 @@
 import { getData } from '../../../../lib/store';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req) {
-  const { participantId, guessId } = await req.json();
-  const data = await getData();
-  const me = (data.participants || []).find((p) => p.id === participantId);
-  if (!me) {
-    return Response.json({ error: 'Jugador no encontrado' }, { status: 404 });
+  const { guessId } = await req.json();
+  if (!guessId) {
+    return Response.json({ error: 'Falta el ID' }, { status: 400 });
   }
 
-  const correct = me.secretFriendId === guessId;
+  const data = await getData();
+  const targetId = data.currentTargetId || '';
+
+  if (!targetId) {
+    return Response.json(
+      { error: 'No hay una ronda activa. El anfitrion debe iniciar una ronda.' },
+      { status: 409 }
+    );
+  }
+
+  const correct = guessId === targetId;
+
   if (!correct) {
     return Response.json({ correct: false });
   }
 
-  const target = (data.participants || []).find((p) => p.id === guessId);
+  const target = (data.participants || []).find((p) => p.id === targetId);
   return Response.json({
     correct: true,
     name: target?.name || 'Desconocido',
