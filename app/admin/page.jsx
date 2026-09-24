@@ -18,8 +18,11 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [uploadingId, setUploadingId] = useState(null);
-  const [sorteoMsg, setSorteoMsg] = useState('');
-  const [sorteando, setSorteando] = useState(false);
+
+  // Round control
+  const [roundTargetId, setRoundTargetId] = useState('');
+  const [roundMsg, setRoundMsg] = useState('');
+  const [settingRound, setSettingRound] = useState(false);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -38,6 +41,7 @@ export default function AdminPage() {
       }
       setAuthorized(true);
       loadParticipants();
+      loadRound();
     } finally {
       setCheckingAuth(false);
     }
@@ -53,6 +57,20 @@ export default function AdminPage() {
       setParticipants(data.participants || []);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadRound() {
+    try {
+      const res = await fetch('/api/admin/round', {
+        headers: { 'x-admin-password': password },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRoundTargetId(data.targetId || '');
+      }
+    } catch (e) {
+      // ignore
     }
   }
 
@@ -85,11 +103,7 @@ export default function AdminPage() {
   }
 
   function removePerson(id) {
-    setParticipants((prev) =>
-      prev
-        .filter((p) => p.id !== id)
-        .map((p) => (p.secretFriendId === id ? { ...p, secretFriendId: '' } : p))
-    );
+    setParticipants((prev) => prev.filter((p) => p.id !== id));
   }
 
   async function uploadPhoto(id, file) {
@@ -106,7 +120,7 @@ export default function AdminPage() {
       try {
         data = await res.json();
       } catch {
-        data = { error: `El servidor respondió con un error inesperado (código ${res.status}).` };
+        data = { error: 'Error inesperado (codigo ' + res.status + ')' };
       }
       if (res.ok) {
         updatePerson(id, 'photoUrl', data.url);
@@ -114,7 +128,7 @@ export default function AdminPage() {
         alert(data.error || 'No se pudo subir la foto');
       }
     } catch (err) {
-      alert('No se pudo subir la foto: ' + (err.message || 'revisa tu conexión'));
+      alert('No se pudo subir la foto: ' + (err.message || 'revisa tu conexion'));
     } finally {
       setUploadingId(null);
     }
@@ -136,39 +150,45 @@ export default function AdminPage() {
       try {
         data = await res.json();
       } catch {
-        data = { error: `El servidor respondió con un error inesperado (código ${res.status}).` };
+        data = { error: 'Error inesperado (codigo ' + res.status + ')' };
       }
-      setSaveMessage(res.ok ? 'Guardado ✓' : data.error || 'Error al guardar');
+      setSaveMessage(res.ok ? 'Guardado!' : data.error || 'Error al guardar');
     } catch (err) {
-      setSaveMessage('No se pudo guardar: ' + (err.message || 'revisa tu conexión'));
+      setSaveMessage('No se pudo guardar: ' + (err.message || 'revisa tu conexion'));
     } finally {
       setSaving(false);
       setTimeout(() => setSaveMessage(''), 6000);
     }
   }
 
-  async function runSorteo() {
-    if (!confirm('¿Hacer el sorteo aleatorio? Esto asigna al azar quién le regala a quién (nadie se regala a sí mismo). Si ya hay un sorteo anterior, se reemplaza.')) return;
-    setSorteando(true);
-    setSorteoMsg('');
+  async function setRound(targetId) {
+    setSettingRound(true);
+    setRoundMsg('');
     try {
-      const res = await fetch('/api/admin/sorteo', {
+      const res = await fetch('/api/admin/round', {
         method: 'POST',
-        headers: { 'x-admin-password': password },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': password,
+        },
+        body: JSON.stringify({ targetId }),
       });
-      let data;
-      try { data = await res.json(); } catch { data = { error: 'Error inesperado' }; }
+      const data = await res.json();
       if (res.ok) {
-        setSorteoMsg(`Sorteo listo — ${data.count} participantes asignados ✓`);
-        loadParticipants();
+        setRoundTargetId(targetId);
+        if (targetId) {
+          setRoundMsg('Ronda iniciada: ' + data.name);
+        } else {
+          setRoundMsg('Ronda detenida');
+        }
       } else {
-        setSorteoMsg(data.error || 'Error al sortear');
+        setRoundMsg(data.error || 'Error');
       }
     } catch (err) {
-      setSorteoMsg('Error: ' + (err.message || 'revisa tu conexión'));
+      setRoundMsg('Error: ' + err.message);
     } finally {
-      setSorteando(false);
-      setTimeout(() => setSorteoMsg(''), 6000);
+      setSettingRound(false);
+      setTimeout(() => setRoundMsg(''), 5000);
     }
   }
 
@@ -190,7 +210,7 @@ export default function AdminPage() {
             disabled={checkingAuth}
             className="w-full rounded-md bg-gold text-pineDark font-medium py-2.5 disabled:opacity-60"
           >
-            {checkingAuth ? 'Verificando…' : 'Entrar'}
+            {checkingAuth ? 'Verificando...' : 'Entrar'}
           </button>
         </form>
       </main>
@@ -199,36 +219,63 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen px-4 py-10 max-w-5xl mx-auto">
+
+      {/* ── ROUND CONTROL ── */}
+      <section className="bg-pineDark/80 border border-gold/30 rounded-md p-5 mb-10">
+        <h2 className="font-display text-2xl mb-1">Control de ronda</h2>
+        <p className="text-paper/60 text-sm mb-4">
+          Selecciona a la persona que los jugadores deben adivinar. Ellos
+          veran las pistas pero no sabran quien es hasta que acierten.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+          <div className="flex-1 w-full">
+            <label className="block text-xs text-paper/60 mb-1">Persona objetivo</label>
+            <select
+              value={roundTargetId}
+              onChange={(e) => setRoundTargetId(e.target.value)}
+              className="w-full rounded-md bg-paper text-pineDark px-3 py-2 text-sm"
+            >
+              <option value="">-- Ninguna (ronda detenida) --</option>
+              {participants.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name || '(sin nombre)'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => setRound(roundTargetId)}
+            disabled={settingRound}
+            className="rounded-md bg-gold text-pineDark px-5 py-2 font-medium disabled:opacity-60 shrink-0"
+          >
+            {settingRound ? 'Guardando...' : roundTargetId ? 'Iniciar ronda' : 'Detener ronda'}
+          </button>
+        </div>
+        {roundMsg && <p className="text-gold text-sm mt-2">{roundMsg}</p>}
+      </section>
+
+      {/* ── PARTICIPANTS ── */}
       <header className="flex items-center justify-between mb-8 flex-wrap gap-3">
         <div>
-          <h1 className="font-display text-3xl">Participantes</h1>
+          <h2 className="font-display text-3xl">Participantes</h2>
           <p className="text-paper/60 text-sm">
-            Sube una foto por persona y define sus características. Cuando
-            estén todos, haz el sorteo.
+            Sube una foto por persona y define sus caracteristicas.
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {saveMessage && <span className="text-sm text-gold">{saveMessage}</span>}
-          {sorteoMsg && <span className="text-sm text-gold">{sorteoMsg}</span>}
           <button
             onClick={saveAll}
             disabled={saving}
             className="rounded-md bg-berry text-paper px-4 py-2 font-medium disabled:opacity-60"
           >
-            {saving ? 'Guardando…' : 'Guardar cambios'}
-          </button>
-          <button
-            onClick={runSorteo}
-            disabled={sorteando || participants.length < 2}
-            className="rounded-md bg-gold text-pineDark px-4 py-2 font-medium disabled:opacity-60"
-          >
-            {sorteando ? 'Sorteando…' : '🎲 Hacer sorteo'}
+            {saving ? 'Guardando...' : 'Guardar cambios'}
           </button>
         </div>
       </header>
 
       {loading ? (
-        <p className="text-paper/60">Cargando…</p>
+        <p className="text-paper/60">Cargando...</p>
       ) : (
         <div className="space-y-6">
           {participants.map((p) => (
@@ -250,7 +297,7 @@ export default function AdminPage() {
                     )}
                   </div>
                   <label className="text-xs text-gold cursor-pointer hover:underline">
-                    {uploadingId === p.id ? 'Subiendo…' : 'Subir foto'}
+                    {uploadingId === p.id ? 'Subiendo...' : 'Subir foto'}
                     <input
                       type="file"
                       accept="image/*"
@@ -277,7 +324,7 @@ export default function AdminPage() {
                     <input
                       value={p.pin}
                       onChange={(e) => updatePerson(p.id, 'pin', e.target.value)}
-                      placeholder="4 dígitos"
+                      placeholder="4 digitos"
                       className="w-full rounded-md bg-paper text-pineDark px-2.5 py-1.5 text-sm"
                     />
                   </div>
@@ -316,7 +363,7 @@ export default function AdminPage() {
             onClick={addPerson}
             className="w-full rounded-md border border-dashed border-gold/40 text-gold py-3 text-sm hover:bg-gold/5"
           >
-            + Añadir participante
+            + Anadir participante
           </button>
         </div>
       )}
