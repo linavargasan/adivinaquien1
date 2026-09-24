@@ -2,61 +2,44 @@
 
 import { useEffect, useState } from 'react';
 
-const TRAIT_LABELS = {
-  genero: 'Género',
-  cabello: 'Color de cabello',
-  gafas: '¿Usa gafas?',
-  barba: '¿Tiene barba o bigote?',
-  edad: 'Rango de edad',
-  accesorio: '¿Usa gorra, sombrero o pañoleta?',
-  estatura: 'Estatura aproximada',
-};
-
 export default function PlayPage() {
   const [participants, setParticipants] = useState([]);
+  const [clues, setClues] = useState([]);
+  const [hasRound, setHasRound] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Game state
-  const [phase, setPhase] = useState('setup'); // setup | playing | found
-  const [targetId, setTargetId] = useState('');
-  const [clues, setClues] = useState([]);
-  const [revealedCount, setRevealedCount] = useState(0);
+  const [revealedCount, setRevealedCount] = useState(1);
   const [discarded, setDiscarded] = useState(new Set());
   const [wrongId, setWrongId] = useState(null);
-  const [foundPerson, setFoundPerson] = useState(null);
+  const [checking, setChecking] = useState(null);
+  const [result, setResult] = useState(null);
 
-  useEffect(() => {
+  function loadGame() {
+    setLoading(true);
     fetch('/api/game')
       .then(async (r) => {
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || 'Error al cargar');
         setParticipants(data.participants || []);
+        setClues(data.clues || []);
+        setHasRound(data.hasRound || false);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadGame();
   }, []);
 
-  function startGame() {
-    if (!targetId) return;
-    const target = participants.find((p) => p.id === targetId);
-    if (!target) return;
-
-    const traitKeys = Object.keys(TRAIT_LABELS);
-    const shuffled = traitKeys
-      .map((key) => ({
-        key,
-        label: TRAIT_LABELS[key],
-        value: target.traits?.[key] || '—',
-      }))
-      .sort(() => Math.random() - 0.5);
-
-    setClues(shuffled);
+  function newRound() {
     setRevealedCount(1);
     setDiscarded(new Set());
     setWrongId(null);
-    setFoundPerson(null);
-    setPhase('playing');
+    setChecking(null);
+    setResult(null);
+    loadGame();
   }
 
   function toggleDiscard(id) {
@@ -68,32 +51,31 @@ export default function PlayPage() {
     });
   }
 
-  function confirmGuess(id) {
+  async function confirmGuess(id) {
+    setChecking(id);
     setWrongId(null);
-    if (id === targetId) {
-      const person = participants.find((p) => p.id === id);
-      setFoundPerson(person);
-      setPhase('found');
-    } else {
-      setWrongId(id);
-      setDiscarded((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch('/api/game/guess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guessId: id }),
+      });
+      const data = await res.json();
+      if (data.correct) {
+        setResult({ name: data.name, photoUrl: data.photoUrl });
+      } else {
+        setWrongId(id);
+        setDiscarded((prev) => new Set(prev).add(id));
+      }
+    } finally {
+      setChecking(null);
     }
-  }
-
-  function resetGame() {
-    setPhase('setup');
-    setTargetId('');
-    setClues([]);
-    setRevealedCount(0);
-    setDiscarded(new Set());
-    setWrongId(null);
-    setFoundPerson(null);
   }
 
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center text-paper/70">
-        Cargando tablero…
+        Cargando tablero...
       </main>
     );
   }
@@ -106,108 +88,69 @@ export default function PlayPage() {
     );
   }
 
-  /* ── FOUND ── */
-  if (phase === 'found' && foundPerson) {
+  if (result) {
     return (
       <main className="min-h-screen flex items-center justify-center px-4 text-center">
         <div>
-          <p className="text-gold text-sm tracking-wide mb-3">¡Encontrado!</p>
+          <p className="text-gold text-sm tracking-wide mb-3">Adivinaste!</p>
           <h1 className="font-display text-3xl mb-6">
-            Tu amigo secreto es {foundPerson.name}
+            El amigo secreto es {result.name}
           </h1>
-          {foundPerson.photoUrl && (
+          {result.photoUrl && (
             <img
-              src={foundPerson.photoUrl}
-              alt={foundPerson.name}
+              src={result.photoUrl}
+              alt={result.name}
               className="w-48 h-48 object-cover rounded-md mx-auto shadow-2xl mb-6"
             />
           )}
           <p className="text-paper/60 text-sm mb-8">
-            Ya puedes ir a comprarle su regalo 🎁
+            Ya puedes ir a comprarle su regalo
           </p>
           <button
-            onClick={resetGame}
+            onClick={newRound}
             className="rounded-md bg-gold text-pineDark px-6 py-2.5 font-medium hover:bg-gold/90 transition"
           >
-            Siguiente turno
+            Siguiente ronda
           </button>
         </div>
       </main>
     );
   }
 
-  /* ── SETUP: host selects the target ── */
-  if (phase === 'setup') {
+  if (!hasRound) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <div className="w-full max-w-sm">
-          <p className="text-gold text-sm tracking-wide mb-2">Nuevo turno</p>
-          <h1 className="font-display text-3xl mb-2">
-            Configurar ronda
-          </h1>
+      <main className="min-h-screen flex items-center justify-center px-4 text-center">
+        <div>
+          <p className="text-gold text-sm tracking-wide mb-2">Adivina quien</p>
+          <h1 className="font-display text-3xl mb-4">Esperando al anfitrion...</h1>
           <p className="text-paper/70 mb-6">
-            Anfitrión: selecciona en secreto a la persona que el jugador debe
-            adivinar (su amigo secreto). ¡Que el jugador no vea la pantalla!
+            El anfitrion debe iniciar una ronda desde el panel de
+            administrador para que puedas jugar.
           </p>
-
-          <label className="block text-sm mb-1 text-paper/80">
-            ¿Quién es el amigo secreto?
-          </label>
-          <select
-            value={targetId}
-            onChange={(e) => setTargetId(e.target.value)}
-            className="w-full rounded-md bg-paper text-pineDark px-3 py-2 outline-none focus:ring-2 focus:ring-gold mb-6"
-          >
-            <option value="">Selecciona una persona…</option>
-            {participants.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-
           <button
-            onClick={startGame}
-            disabled={!targetId}
-            className="w-full rounded-md bg-berry hover:bg-berry/90 text-paper font-medium py-2.5 transition disabled:opacity-50"
+            onClick={newRound}
+            className="rounded-md bg-berry text-paper px-5 py-2.5 font-medium hover:bg-berry/90 transition"
           >
-            Comenzar ronda
+            Recargar
           </button>
-
-          <a
-            href="/"
-            className="block text-center text-paper/40 text-xs mt-8 hover:text-paper/70"
-          >
-            ← Volver al inicio
-          </a>
         </div>
       </main>
     );
   }
 
-  /* ── PLAYING ── */
   return (
     <main className="min-h-screen px-4 py-8 md:py-12 max-w-5xl mx-auto">
-      <header className="mb-8 flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <p className="text-gold text-sm tracking-wide">Adivina quién</p>
-          <h1 className="font-display text-3xl mb-2">
-            Encuentra a tu amigo secreto
-          </h1>
-          <p className="text-paper/70 max-w-xl">
-            Pide pistas sobre sus características y descarta fotos tocándolas.
-            Cuando creas saber quién es, confírmalo con el botón dorado.
-          </p>
-        </div>
-        <button
-          onClick={resetGame}
-          className="rounded-md border border-paper/30 text-paper/70 px-3 py-1.5 text-sm hover:bg-paper/10 transition shrink-0"
-        >
-          Reiniciar turno
-        </button>
+      <header className="mb-8">
+        <p className="text-gold text-sm tracking-wide">Adivina quien</p>
+        <h1 className="font-display text-3xl mb-2">
+          Encuentra al amigo secreto
+        </h1>
+        <p className="text-paper/70 max-w-xl">
+          Pide pistas y descarta fotos tocandolas. Cuando creas saber quien
+          es, confirmalo con el boton dorado.
+        </p>
       </header>
 
-      {/* Clues */}
       <section className="clue-note rounded-md p-4 mb-8">
         <p className="font-medium mb-2">Pistas reveladas</p>
         <ul className="space-y-1 text-sm">
@@ -223,11 +166,10 @@ export default function PlayPage() {
           disabled={revealedCount >= clues.length}
           className="mt-3 text-sm rounded-md bg-pineDark text-paper px-3 py-1.5 disabled:opacity-40 hover:bg-pineDark/80 transition"
         >
-          {revealedCount >= clues.length ? 'No hay más pistas' : 'Pedir otra pista'}
+          {revealedCount >= clues.length ? 'No hay mas pistas' : 'Pedir otra pista'}
         </button>
       </section>
 
-      {/* Board */}
       <section className="corkboard rounded-md p-4 md:p-6">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
           {participants.map((p) => {
@@ -237,11 +179,13 @@ export default function PlayPage() {
               <div key={p.id} className="flex flex-col items-center">
                 <button
                   onClick={() => toggleDiscard(p.id)}
-                  className={`photo-tag relative rounded-sm w-full ${
-                    isDiscarded ? 'discarded' : ''
-                  } ${isWrong ? 'ring-2 ring-berry' : ''}`}
+                  className={
+                    'photo-tag relative rounded-sm w-full ' +
+                    (isDiscarded ? 'discarded ' : '') +
+                    (isWrong ? 'ring-2 ring-berry ' : '')
+                  }
                   style={{
-                    transform: `rotate(${(p.id.charCodeAt(0) % 5) - 2}deg)`,
+                    transform: 'rotate(' + ((p.id.charCodeAt(0) % 5) - 2) + 'deg)',
                   }}
                 >
                   <span className="pin absolute -top-1.5 left-1/2 -translate-x-1/2" />
@@ -265,9 +209,10 @@ export default function PlayPage() {
                 {!isDiscarded && (
                   <button
                     onClick={() => confirmGuess(p.id)}
-                    className="mt-2 text-xs rounded-md bg-gold text-pineDark px-2.5 py-1 font-medium hover:bg-gold/90 transition"
+                    disabled={checking === p.id}
+                    className="mt-2 text-xs rounded-md bg-gold text-pineDark px-2.5 py-1 font-medium hover:bg-gold/90 transition disabled:opacity-50"
                   >
-                    Es esta persona
+                    {checking === p.id ? 'Comprobando...' : 'Es esta persona'}
                   </button>
                 )}
               </div>
