@@ -18,6 +18,8 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [uploadingId, setUploadingId] = useState(null);
+  const [sorteoMsg, setSorteoMsg] = useState('');
+  const [sorteando, setSorteando] = useState(false);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -145,6 +147,31 @@ export default function AdminPage() {
     }
   }
 
+  async function runSorteo() {
+    if (!confirm('¿Hacer el sorteo aleatorio? Esto asigna al azar quién le regala a quién (nadie se regala a sí mismo). Si ya hay un sorteo anterior, se reemplaza.')) return;
+    setSorteando(true);
+    setSorteoMsg('');
+    try {
+      const res = await fetch('/api/admin/sorteo', {
+        method: 'POST',
+        headers: { 'x-admin-password': password },
+      });
+      let data;
+      try { data = await res.json(); } catch { data = { error: 'Error inesperado' }; }
+      if (res.ok) {
+        setSorteoMsg(`Sorteo listo — ${data.count} participantes asignados ✓`);
+        loadParticipants();
+      } else {
+        setSorteoMsg(data.error || 'Error al sortear');
+      }
+    } catch (err) {
+      setSorteoMsg('Error: ' + (err.message || 'revisa tu conexión'));
+    } finally {
+      setSorteando(false);
+      setTimeout(() => setSorteoMsg(''), 6000);
+    }
+  }
+
   if (!authorized) {
     return (
       <main className="min-h-screen flex items-center justify-center px-4">
@@ -176,18 +203,26 @@ export default function AdminPage() {
         <div>
           <h1 className="font-display text-3xl">Participantes</h1>
           <p className="text-paper/60 text-sm">
-            Sube una foto por persona, define sus características y a quién le
-            regala cada uno.
+            Sube una foto por persona y define sus características. Cuando
+            estén todos, haz el sorteo.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {saveMessage && <span className="text-sm text-gold">{saveMessage}</span>}
+          {sorteoMsg && <span className="text-sm text-gold">{sorteoMsg}</span>}
           <button
             onClick={saveAll}
             disabled={saving}
             className="rounded-md bg-berry text-paper px-4 py-2 font-medium disabled:opacity-60"
           >
             {saving ? 'Guardando…' : 'Guardar cambios'}
+          </button>
+          <button
+            onClick={runSorteo}
+            disabled={sorteando || participants.length < 2}
+            className="rounded-md bg-gold text-pineDark px-4 py-2 font-medium disabled:opacity-60"
+          >
+            {sorteando ? 'Sorteando…' : '🎲 Hacer sorteo'}
           </button>
         </div>
       </header>
@@ -245,28 +280,6 @@ export default function AdminPage() {
                       placeholder="4 dígitos"
                       className="w-full rounded-md bg-paper text-pineDark px-2.5 py-1.5 text-sm"
                     />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs text-paper/60 mb-1">
-                      Le regala a
-                    </label>
-                    <select
-                      value={p.secretFriendId || ''}
-                      onChange={(e) =>
-                        updatePerson(p.id, 'secretFriendId', e.target.value)
-                      }
-                      className="w-full rounded-md bg-paper text-pineDark px-2.5 py-1.5 text-sm"
-                    >
-                      <option value="">Selecciona…</option>
-                      {participants
-                        .filter((other) => other.id !== p.id)
-                        .map((other) => (
-                          <option key={other.id} value={other.id}>
-                            {other.name || '(sin nombre)'}
-                          </option>
-                        ))}
-                    </select>
                   </div>
 
                   {TRAIT_DEFS.map((def) => (
